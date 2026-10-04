@@ -335,6 +335,12 @@
     // ---------- Groq pipeline ----------
     class UserError extends Error {}
 
+    async function readJson(res) {
+      const t = await res.text();
+      try { return JSON.parse(t); }
+      catch (e) { throw new UserError('Server ' + res.status + ': ' + t.slice(0, 40)); }
+    }
+
     async function handleUtterance(blob) {
       if (state !== 'thinking') return;
       try {
@@ -345,7 +351,7 @@
         speakResponse(reply);
       } catch (err) {
         console.error(err);
-        setStatus(err instanceof UserError ? err.message : 'Network Error');
+        setStatus(err instanceof UserError ? err.message : (err instanceof TypeError ? 'Network Error: request blocked (CORS/URL)' : 'Error: ' + err.message));
         setTimeout(backToListening, 1500);
       }
     }
@@ -358,8 +364,8 @@
       const res = await fetch(PROXY_URL + "/transcribe", {
         method: "POST", body: fd
       });
-      const data = await res.json();
-      if (data.error) throw new UserError("Server Error");
+      const data = await readJson(res);
+      if (data.error) throw new UserError("Server Error: " + String((data.error && data.error.message) || data.error).slice(0, 60));
       return (data.text || '').trim();
     }
 
@@ -372,7 +378,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: voxaBrainMemory, max_tokens: 120 })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         const reply = data.choices && data.choices[0] && data.choices[0].message.content;
         if (!reply) throw new UserError("Brain Error");
         voxaBrainMemory.push({ role: "assistant", content: reply });
