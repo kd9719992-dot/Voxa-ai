@@ -133,7 +133,8 @@
     <div class="sphere-boundary" id="boundary"></div>
   </div>
 
-  <div class="status-text" id="statusText">Tap Orb to Start</div>
+<div class="status-text" id="statusText">Listening...</div>
+  
 
   <script>
     // ⚠️ Apni Nayi Groq API Key Quotes Ke Andar Dalein:
@@ -264,11 +265,12 @@
         const data = await res.json();
 
         if (data.error) {
-          statusText.innerText = "Invalid Groq API Key";
-          setThinkingState(false);
-          restartRecording();
-          return;
+  statusText.innerText = "Groq API Key Error";
+  setThinkingState(false);
+  setTimeout(() => { restartRecording(); }, 1500);
+  return;
         }
+        
 
         if (data.text && data.text.trim().length > 0) {
           await askVoxaBrain(data.text);
@@ -435,20 +437,17 @@
     }
 
     // SAFE CLICK HANDLER FOR APP CONTAINER
-    voxaOrb.addEventListener('click', async () => {
-      await initPermanentMic();
+    window.addEventListener('DOMContentLoaded', () => {
+  initPermanentMic();
+});
 
-      if (audioCtx && audioCtx.state === 'suspended') {
-        try { await audioCtx.resume(); } catch(e) {}
-      }
-
-      if ('speechSynthesis' in window && window.speechSynthesis) {
-        if (typeof window.speechSynthesis.resume === 'function') {
-          try { window.speechSynthesis.resume(); } catch (e) {}
-        }
-      }
-    });
-
+document.addEventListener('click', async () => {
+  await initPermanentMic();
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try { await audioCtx.resume(); } catch(e) {}
+  }
+});
+    
     render();
   </script>
 </body>
