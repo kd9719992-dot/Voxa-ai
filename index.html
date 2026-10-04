@@ -164,7 +164,7 @@
 
     const voxaBrainMemory = [{
       role: "system",
-      content: "Aap Voxa hain, ek smart voice assistant. Short, clear Hinglish me answer dein."
+      content: "You are Voxa, a friendly voice assistant. Reply in the same language the user just spoke. If the user speaks English, reply in English. If the user speaks Hindi or Hinglish, reply in Hindi written in Devanagari script, keeping common English words (phone, battery, app, etc.) in English letters. If the language is unclear, use English. Keep replies short: 1-3 natural spoken sentences. Never use emojis, markdown, asterisks or lists."
     }];
 
     const setStatus = (t) => { statusText.innerText = t; };
@@ -361,6 +361,8 @@
       const fd = new FormData();
       fd.append("file", blob, `audio.${ext}`);
       fd.append("model", "whisper-large-v3-turbo");
+      fd.append("temperature", "0");
+      fd.append("prompt", "Hindi and English conversation. हिंदी और English मिलाकर बातचीत।");
       const res = await fetch(PROXY_URL + "/transcribe", {
         method: "POST", body: fd
       });
@@ -390,15 +392,26 @@
     }
 
     // ---------- Speech ----------
+    function cleanForSpeech(t) {
+      return String(t).replace(/[*_#`~>|]/g, ' ').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function pickVoice(voices, hindi) {
+      if (hindi) return voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi'));
+      return voices.find(v => v.lang === 'en-IN') || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+    }
+
     function speakResponse(text) {
       const synth = window.speechSynthesis;
-      if (!synth) return backToListening();
+      text = cleanForSpeech(text);
+      if (!synth || !text) return backToListening();
 
       state = 'speaking';
       setThinking(false);
       setStatus('Voxa Speaking...');
 
-      let done = false, watchdog;
+      const parts = (text.match(/[^.!?।]+[.!?।]*/g) || [text]).map(p => p.trim()).filter(Boolean);
+      let done = false, watchdog, remaining = parts.length;
       const finish = () => {
         if (done) return;
         done = true;
@@ -410,15 +423,17 @@
       try {
         synth.cancel();
         try { synth.resume(); } catch (e) {}
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = "hi-IN";
         const voices = synth.getVoices() || [];
-        const v = voices.find(x => x.lang && x.lang.startsWith('hi')) || voices.find(x => x.lang === 'en-IN');
-        if (v) u.voice = v;
-        u.onend = finish;
-        u.onerror = finish;
+        parts.forEach(p => {
+          const hindi = /[\u0900-\u097F]/.test(p);   // Devanagari sentence -> Hindi voice, else English voice
+          const u = new SpeechSynthesisUtterance(p);
+          u.lang = hindi ? 'hi-IN' : 'en-IN';
+          const v = pickVoice(voices, hindi);
+          if (v) u.voice = v;
+          u.onend = u.onerror = () => { if (--remaining <= 0) finish(); };
+          synth.speak(u);
+        });
         watchdog = setTimeout(finish, Math.max(5000, text.length * 150 + 3000)); // onend sometimes never fires
-        synth.speak(u);
       } catch (e) { finish(); }
     }
 
