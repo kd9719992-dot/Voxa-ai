@@ -226,36 +226,38 @@ const stream = await navigator.mediaDevices.getUserMedia({
       await transcribeAudio(blob);
     }
   };
-
-  mediaRecorder.start();
-}
+    } 
 
 
-    function processVoiceSilence(avg) {
-  if (isAiSpeaking || isThinking) return;
+
+    
 
   // 15 se upar ki aawaz ko hi bolna mana jayega (Fan/Phone noise ignore ho jayega)
-  if (avg > 15) { 
-    if (!isUserSpeaking) {
-      isUserSpeaking = true;
-      statusText.innerText = "Listening...";
-      if (mediaRecorder && mediaRecorder.state === "inactive") {
-        mediaRecorder.start();
+       function processVoiceSilence(avg) {
+      if (isAiSpeaking || isThinking) return;
+
+      if (avg > 15) { 
+        if (!isUserSpeaking) {
+          isUserSpeaking = true;
+          statusText.innerText = "Listening...";
+          audioChunks = []; 
+          if (mediaRecorder && mediaRecorder.state === "inactive") {
+            try { mediaRecorder.start(); } catch(e) {}
+          }
+        }
+        clearTimeout(silenceTimer);
+      } else if (isUserSpeaking) {
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          isUserSpeaking = false;
+          statusText.innerText = "Voxa Thinking...";
+          if (mediaRecorder && mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+          }
+        }, 600); 
       }
     }
-    clearTimeout(silenceTimer);
-  } else if (isUserSpeaking) {
-    clearTimeout(silenceTimer);
-    // Silent hone ke 600ms baad hi reply ke liye bhej dega
-    silenceTimer = setTimeout(() => {
-      isUserSpeaking = false;
-      statusText.innerText = "Voxa Thinking...";
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-      }
-    }, 600); 
-  }
-    }
+    
 
     
 
