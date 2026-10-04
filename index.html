@@ -427,10 +427,11 @@
         parts.forEach(p => {
           const hindi = /[\u0900-\u097F]/.test(p);   // Devanagari sentence -> Hindi voice, else English voice
           const u = new SpeechSynthesisUtterance(p);
-          u.lang = hindi ? 'hi-IN' : 'en-IN';
           const v = pickVoice(voices, hindi);
-          if (v) u.voice = v;
-          u.onend = u.onerror = () => { if (--remaining <= 0) finish(); };
+          if (v) { u.voice = v; u.lang = v.lang; }
+          else if (hindi) u.lang = 'hi-IN';            // English with no matching voice: use device default voice
+          u.onend = () => { if (--remaining <= 0) finish(); };
+          u.onerror = (e) => { console.warn('TTS error:', e.error); if (--remaining <= 0) finish(); };
           synth.speak(u);
         });
         watchdog = setTimeout(finish, Math.max(5000, text.length * 150 + 3000)); // onend sometimes never fires
