@@ -152,7 +152,7 @@
     let noiseFloor = 0.01, aboveSince = 0, lastVoiceAt = 0, speechStartedAt = 0;
     let isUserSpeaking = false, voiceVolume = 0;
 
-    const SILENCE_MS = 700, MIN_SPEECH_MS = 350, ONSET_MS = 150, IDLE_RECYCLE_MS = 4000, MAX_UTTERANCE_MS = 30000;
+    const SILENCE_MS = 550, MIN_SPEECH_MS = 350, ONSET_MS = 150, IDLE_RECYCLE_MS = 4000, MAX_UTTERANCE_MS = 30000;
 
     const recorderOptions = (() => {
       if (typeof MediaRecorder === 'undefined') return {};
@@ -236,10 +236,23 @@
       }
     }
 
+    let ttsWarmed = false;
+    function warmTTS() {                                   // first tap: wake the speech engine so first reply starts fast
+      if (ttsWarmed || !window.speechSynthesis) return;
+      ttsWarmed = true;
+      try {
+        speechSynthesis.getVoices();
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        speechSynthesis.speak(u);
+      } catch (e) {}
+    }
+
     let gestureBusy = false;
     async function onUserGesture() {
       if (gestureBusy) return;
       gestureBusy = true;
+      warmTTS();
       try {
         if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); // inside the gesture
         if (!initPromise) await initAudio();
@@ -347,8 +360,7 @@
         if (blob.size < 2000) return backToListening();
         const text = await transcribe(blob);
         if (!text) return backToListening();
-        const reply = await askVoxaBrain(text);
-        speakResponse(reply);
+        await streamReply(text);
       } catch (err) {
         console.error(err);
         setStatus(err instanceof UserError ? err.message : (err instanceof TypeError ? 'Network Error: request blocked (CORS/URL)' : 'Error: ' + err.message));
@@ -371,114 +383,132 @@
       return (data.text || '').trim();
     }
 
-    async function askVoxaBrain(userPrompt) {
+    async function streamReply(userPrompt) {
       voxaBrainMemory.push({ role: "user", content: userPrompt });
-      if (voxaBrainMemory.length > 21) voxaBrainMemory.splice(1, voxaBrainMemory.length - 21);
+      if (voxaBrainMemory.length > 7) voxaBrainMemory.splice(1, voxaBrainMemory.length - 7);  // system + last 6
+      const synth = window.speechSynthesis;
+      let full = '', buf = '', started = false;
+
+      const emit = (sentence) => {
+        if (!synth) return;
+        if (!started) { started = true; startSpeech(); }   // first sentence -> speak immediately
+        enqueueSpeech(sentence);
+      };
+
       try {
         const res = await fetch(PROXY_URL + "/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: voxaBrainMemory, max_tokens: 120 })
+          body: JSON.stringify({ messages: voxaBrainMemory, stream: true })
         });
-        const data = await readJson(res);
-        const reply = data.choices && data.choices[0] && data.choices[0].message.content;
-        if (!reply) throw new UserError("Brain Error");
-        voxaBrainMemory.push({ role: "assistant", content: reply });
-        return reply;
+        if (!res.ok || !res.body) {
+          const t = await res.text().catch(() => '');
+          throw new UserError('Server ' + res.status + ': ' + t.slice(0, 40));
+        }
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let sse = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          sse += dec.decode(value, { stream: true });
+          let nl;
+          while ((nl = sse.indexOf('\n')) >= 0) {
+            const line = sse.slice(0, nl).trim();
+            sse = sse.slice(nl + 1);
+            if (!line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (payload === '[DONE]') continue;
+            let j; try { j = JSON.parse(payload); } catch (e) { continue; }
+            if (j.error) throw new UserError('Brain: ' + String(j.error.message || j.error).slice(0, 50));
+            const d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+            if (d) {
+              full += d; buf += d;
+              let m;
+              while ((m = buf.match(/^([\s\S]*?[.!?।])\s+/))) { emit(m[1]); buf = buf.slice(m[0].length); }
+            }
+          }
+        }
+        if (buf.trim()) emit(buf);
+        if (!full.trim()) throw new UserError('Brain Error');
+        voxaBrainMemory.push({ role: "assistant", content: full });
+        if (started) endSpeechStream(); else backToListening();
       } catch (e) {
-        voxaBrainMemory.pop();                       // keep user/assistant turns alternating
+        if (started) {                                   // already speaking: let it finish, keep what we have
+          if (full.trim()) voxaBrainMemory.push({ role: "assistant", content: full });
+          endSpeechStream();
+          return;
+        }
+        voxaBrainMemory.pop();                           // keep user/assistant turns alternating
         throw e;
       }
     }
 
-    // ---------- Speech ----------
+    // ---------- Speech (speaks each sentence as it arrives) ----------
     function cleanForSpeech(t) {
       return String(t).replace(/[*_#`~>|]/g, ' ').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
     }
 
     function pickVoice(voices, hindi) {
-      if (hindi) return voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi'));
-      return voices.find(v => v.lang === 'en-IN') || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+      const want = hindi ? 'hi' : 'en';
+      const score = (v) => (v.localService ? 2 : 0) + (!hindi && v.lang === 'en-IN' ? 1 : 0);   // local voices start fastest
+      const list = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(want)).sort((a, b) => score(b) - score(a));
+      return list[0];
     }
 
-    function speakResponse(text) {
+    let speech = null;
+
+    function startSpeech() {
       const synth = window.speechSynthesis;
-      text = cleanForSpeech(text);
-      if (!synth || !text) return backToListening();
-
-      state = 'speaking';
-      setThinking(false);
-      setStatus('Voxa Speaking...');
-
-      const parts = (text.match(/[^.!?।]+[.!?।]*/g) || [text]).map(p => p.trim()).filter(Boolean);
-      let done = false, watchdog, remaining = parts.length;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        clearTimeout(watchdog);
-        try { synth.cancel(); } catch (e) {}
-        setTimeout(backToListening, 350);            // let speaker tail die so mic doesn't hear it
-      };
-
-      try {
-        synth.cancel();
-        try { synth.resume(); } catch (e) {}
-        const voices = synth.getVoices() || [];
-        parts.forEach(p => {
-          const hindi = /[\u0900-\u097F]/.test(p);   // Devanagari sentence -> Hindi voice, else English voice
-          const u = new SpeechSynthesisUtterance(p);
-          const v = pickVoice(voices, hindi);
-          if (v) { u.voice = v; u.lang = v.lang; }
-          else if (hindi) u.lang = 'hi-IN';            // English with no matching voice: use device default voice
-          u.onend = () => { if (--remaining <= 0) finish(); };
-          u.onerror = (e) => { console.warn('TTS error:', e.error); if (--remaining <= 0) finish(); };
-          synth.speak(u);
-        });
-        watchdog = setTimeout(finish, Math.max(5000, text.length * 150 + 3000)); // onend sometimes never fires
-      } catch (e) { finish(); }
+      try { if (synth.speaking || synth.pending) synth.cancel(); } catch (e) {}
+      try { if (synth.paused) synth.resume(); } catch (e) {}
+      speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null, started: false, startTimer: null };
     }
 
-    // ---------- Orb animation ----------
-    let main360Rot = 0, rot1 = 0, rot2 = 0, basePulse = 0;
-    let currentSpeed = 0.6, currentScale = 1.0, currentGlow = 25, coreGlowScale = 1.0;
-    const lerp = (a, b, t) => (1 - t) * a + t * b;
-
-    function render() {
-      const thinking = state === 'thinking';
-      const vv = state === 'speaking' ? 1.6 : voiceVolume;
-      let targetSpeed = 0.6, targetScale = 1.0, targetGlow = 25, targetCore = 1.0;
-
-      if (thinking) { targetSpeed = 1.8; targetGlow = 45; targetCore = 1.15; }
-      else if (vv > 0) {
-        targetSpeed = 0.6 + vv * 2.8;
-        targetScale = 1.0 + vv * 0.12;
-        targetGlow = 25 + vv * 35;
-        targetCore = 1.0 + vv * 0.18;
-      }
-
-      const ease = (vv > 0 || thinking) ? 0.08 : 0.18;
-      currentSpeed = lerp(currentSpeed, targetSpeed, ease);
-      currentScale = lerp(currentScale, targetScale, ease);
-      currentGlow = lerp(currentGlow, targetGlow, ease);
-      coreGlowScale = lerp(coreGlowScale, targetCore, ease);
-
-      main360Rot = (main360Rot + currentSpeed * 0.7) % 360;
-      rot1 = (rot1 + currentSpeed * 1.2) % 360;
-      rot2 = (rot2 - currentSpeed * 0.9) % 360;
-      basePulse += 0.025;
-      const finalScale = currentScale + Math.sin(basePulse) * 0.02;
-
-      voxaOrb.style.transform = `rotate(${main360Rot}deg)`;
-      w1.style.transform = `rotate(${rot1}deg) scale(${finalScale})`;
-      w2.style.transform = `rotate(${rot2}deg) scale(${finalScale * 1.02})`;
-      boundary.style.transform = `scale(${finalScale})`;
-      core.style.transform = `scale(${coreGlowScale})`;
-      glow.style.boxShadow = `0 0 ${currentGlow}px ${thinking ? 'rgba(168, 85, 247, 0.85)' : 'rgba(0, 243, 255, 0.85)'}`;
-      requestAnimationFrame(render);
+    function markStarted(sp) {                             // show "Speaking" only when sound really begins
+      if (sp.started || sp.done) return;
+      sp.started = true;
+      clearTimeout(sp.startTimer);
+      if (speech === sp) { state = 'speaking'; setThinking(false); setStatus('Voxa Speaking...'); }
     }
 
-    render();
-    initAudio();
-  </script>
-</body>
-</html>
+    function armWatchdog(sp) {                             // onend sometimes never fires
+      clearTimeout(sp.watchdog);
+      sp.watchdog = setTimeout(() => finishSpeech(sp), 8000 + sp.chars * 150);
+    }
+
+    function finishSpeech(sp) {
+      if (!sp || sp.done) return;
+      sp.done = true;
+      clearTimeout(sp.watchdog);
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+      setTimeout(backToListening, 350);                    // let speaker tail die so mic doesn't hear it
+    }
+
+    function checkSpeechDone(sp) { if (sp.streamEnded && sp.pending <= 0) finishSpeech(sp); }
+
+    function endSpeechStream() {
+      if (!speech) return;
+      speech.streamEnded = true;
+      checkSpeechDone(speech);
+    }
+
+    function enqueueSpeech(text) {
+      const sp = speech;
+      const synth = window.speechSynthesis;
+      if (!sp || sp.done) return;
+      const clean = cleanForSpeech(text);
+      if (!clean) return;
+      const voices = synth.getVoices() || [];
+      const parts = (clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(Boolean);
+      parts.forEach(p => {
+        const hindi = /[\u0900-\u097F]/.test(p);           // Devanagari -> Hindi voice, else English voice
+        const u = new SpeechSynthesisUtterance(p);
+        const v = pickVoice(voices, hindi);
+        if (v) { u.voice = v; u.lang = v.lang; }
+        else if (hindi) u.lang = 'hi-IN';                  // English with no matching voice: device default
+        sp.pending++; sp.chars += p.length;
+        u.onstart = () => markStarted(sp);
+        u.onend = () => { sp.pending--; checkSpeechDone(sp); };
+        u.onerror = (e) => { console.warn('TTS error:', e.error); sp.pending--; checkSpeechDone(sp); };
+        try { synth.speak(u); } catch (err)
