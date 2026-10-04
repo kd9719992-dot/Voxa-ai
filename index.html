@@ -166,10 +166,18 @@
     async function initPermanentMic() {
       if (isListening) return;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, 
-          video: false 
-        });
+        // New Updated Code:
+const stream = await navigator.mediaDevices.getUserMedia({ 
+  audio: { 
+    echoCancellation: true, 
+    noiseSuppression: true, 
+    autoGainControl: false, 
+    channelCount: 1,
+    sampleRate: 16000
+  }, 
+  video: false 
+});
+        
         
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') {
@@ -226,7 +234,8 @@
     function processVoiceSilence(avg) {
   if (isAiSpeaking || isThinking) return;
 
-  if (avg > 6) {
+  // 15 se upar ki aawaz ko hi bolna mana jayega (Fan/Phone noise ignore ho jayega)
+  if (avg > 15) { 
     if (!isUserSpeaking) {
       isUserSpeaking = true;
       statusText.innerText = "Listening...";
@@ -237,16 +246,18 @@
     clearTimeout(silenceTimer);
   } else if (isUserSpeaking) {
     clearTimeout(silenceTimer);
+    // Silent hone ke 600ms baad hi reply ke liye bhej dega
     silenceTimer = setTimeout(() => {
       isUserSpeaking = false;
       statusText.innerText = "Voxa Thinking...";
       if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.stop();
       }
-    }, 1000);
+    }, 600); 
   }
-}
+    }
 
+    
 
     async function transcribeAudio(blob) {
       setThinkingState(true);
@@ -402,17 +413,18 @@
         
         processVoiceSilence(avg);
 
-        if (avg > 8 || isAiSpeaking) { 
+                if (avg > 15 || isAiSpeaking) { 
           isVoiceActive = true;
-          let voiceVolume = isAiSpeaking ? 1.6 : Math.min((avg - 8) / 18, 2.0); 
+          let voiceVolume = isAiSpeaking ? 1.6 : Math.min((avg - 15) / 18, 2.0); 
           targetSpeed = 0.6 + (voiceVolume * 2.8); 
           targetScale = 1.0 + (voiceVolume * 0.12);
           targetGlow = 25 + (voiceVolume * 35);
           targetCoreScale = 1.0 + (voiceVolume * 0.18);
-        }
-      }
+        } // <--- Yeh bracket lagana bhool gaye the
+      } // <--- Yeh 'else if' block ka closing bracket hai
 
       let easingFactor = isVoiceActive || isThinking ? 0.08 : 0.18;
+    
       currentSpeed = lerp(currentSpeed, targetSpeed, easingFactor);
       currentScale = lerp(currentScale, targetScale, easingFactor);
       currentGlow = lerp(currentGlow, targetGlow, easingFactor);
