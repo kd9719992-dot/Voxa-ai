@@ -366,7 +366,7 @@ throw new UserError('Server ' + res.status + ': ' + t.slice(0, 40));
 }
 const reader = res.body.getReader();
 const dec = new TextDecoder();
-let sse = '', raw = '';
+let sse = '', raw = '', fin = '', sawR = false;
 while (true) {
 const { value, done } = await reader.read();
 if (done) break;
@@ -379,6 +379,8 @@ if (!line.startsWith('data:')) continue;
 const payload = line.slice(5).trim();
 if (payload === '[DONE]') continue;
 let j; try { j = JSON.parse(payload); } catch (e) { continue; }
+const c0 = j.choices && j.choices[0];
+if (c0) { if (c0.finish_reason) fin = c0.finish_reason; if (c0.delta && c0.delta.reasoning) sawR = true; }
 if (j.error) throw new UserError('Brain: ' + String(j.error.message || j.error).slice(0, 50));
 const d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
 if (d) {
@@ -397,7 +399,7 @@ const c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].mess
 if (c) { full = c; emit(c); }
 } catch (e) { if (e instanceof UserError) throw e; }
 }
-if (!full.trim()) throw new UserError('Brain Error');
+if (!full.trim()) throw new UserError('Brain Error: empty (' + (fin || 'no finish') + (sawR ? ', thinking only' : '') + ', ' + raw.length + 'B)');
 voxaBrainMemory.push({ role: "assistant", content: full });
 if (started) endSpeechStream(); else backToListening();
 } catch (e) {
@@ -510,5 +512,5 @@ render();
 initAudio();
 </script>
 </body>
-  </html>
+</html>
   
