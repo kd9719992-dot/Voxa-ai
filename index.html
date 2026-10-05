@@ -303,7 +303,7 @@ speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null
 function markStarted(sp) {
 if (sp.started || sp.done) return;
 sp.started = true;
-if (speech === sp) { state = 'speaking'; setThinking(false); setStatus('Voxa Speaking...'); }
+if (speech === sp) { state = 'speaking'; setThinking(false); setStatus('Voxa Speaking...' + (sp.note ? ' ⚠ ' + sp.note : '')); }
 }
 function armWatchdog(sp) {
 clearTimeout(sp.watchdog);
@@ -341,8 +341,13 @@ async function fetchAudio(text, emo) {
 const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 9000);
 try {
 const r = await fetch(PROXY_URL + "/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, emo }), signal: ctl.signal });
-if (!r.ok) throw new Error('speak ' + r.status);
-return await audioCtx.decodeAudioData(await r.arrayBuffer());
+if (!r.ok) throw new Error((await r.text()).slice(0, 90));
+const buf = await audioCtx.decodeAudioData(await r.arrayBuffer());
+const d = buf.getChannelData(0);
+let pk = 0;
+for (let i = 0; i < d.length; i += 50) pk = Math.max(pk, Math.abs(d[i]));
+if (pk < 0.01) throw new Error('silent audio');
+return buf;
 } finally { clearTimeout(t); }
 }
 async function playBuffer(sp, buf) {
@@ -364,6 +369,8 @@ if (sp.done) return;
 try { await playBuffer(sp, await job); }
 catch (e) {
 console.warn('Neural voice failed, using phone voice:', e.message);
+sp.note = String(e.message).slice(0, 80);
+if (sp.started) setStatus('Voxa Speaking... ⚠ ' + sp.note);
 if (!sp.done) await Promise.race([new Promise(r => speakPart(sp, p, r)), new Promise(r => setTimeout(r, 6000 + p.length * 150))]);
 }
 }).finally(() => { sp.pending--; checkSpeechDone(sp); });
@@ -375,7 +382,7 @@ const em = text.match(/^\s*\[([^\]]{2,20})\]/);
 if (em) sp.emo = em[1].toLowerCase().trim();
 const clean = cleanForSpeech(text);
 if (!clean) return;
-(clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(Boolean).forEach(p => { sp.chars += p.length; queueSpeech(sp, p, sp.emo); });
+(clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(p => /[\p{L}\p{N}]/u.test(p)).forEach(p => { sp.chars += p.length; queueSpeech(sp, p, sp.emo); });
 armWatchdog(sp);
 }
 let main360Rot = 0, rot1 = 0, rot2 = 0, basePulse = 0;
@@ -415,4 +422,3 @@ initAudio();
 </script>
 </body>
 </html>
-p
