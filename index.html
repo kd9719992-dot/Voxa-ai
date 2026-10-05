@@ -216,6 +216,7 @@ speechSynthesis.getVoices();
 const u = new SpeechSynthesisUtterance(' ');
 u.volume = 0;
 speechSynthesis.speak(u);
+setTimeout(() => { try { if (!speech || speech.done) speechSynthesis.cancel(); } catch (e) {} }, 300);
 } catch (e) {}
 }
 let gestureBusy = false;
@@ -416,7 +417,7 @@ function startSpeech() {
 const synth = window.speechSynthesis;
 try { if (synth.speaking || synth.pending) synth.cancel(); } catch (e) {}
 try { if (synth.paused) synth.resume(); } catch (e) {}
-speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null, started: false, startTimer: null };
+speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null, started: false, startTimer: null, gen: 0, parts: [], retried: false, retrying: false };
 }
 function markStarted(sp) {
 if (sp.started || sp.done) return;
@@ -435,33 +436,44 @@ clearTimeout(sp.watchdog);
 try { window.speechSynthesis.cancel(); } catch (e) {}
 setTimeout(backToListening, 350);
 }
-function checkSpeechDone(sp) { if (sp.streamEnded && sp.pending <= 0) finishSpeech(sp); }
+function checkSpeechDone(sp) { if (sp.streamEnded && sp.pending <= 0 && !sp.retrying) finishSpeech(sp); }
 function endSpeechStream() {
 if (!speech) return;
 speech.streamEnded = true;
 checkSpeechDone(speech);
 }
+function speakPart(sp, p, plain) {
+const synth = window.speechSynthesis, g = sp.gen;
+const hindi = /[\u0900-\u097F]/.test(p);
+const u = new SpeechSynthesisUtterance(p);
+const v = plain ? null : pickVoice(synth.getVoices() || [], hindi);
+if (v) { u.voice = v; u.lang = v.lang; } else if (hindi) u.lang = 'hi-IN';
+u.onstart = () => { if (g === sp.gen) markStarted(sp); };
+const fin = () => { if (g !== sp.gen) return; sp.pending--; checkSpeechDone(sp); };
+u.onend = fin;
+u.onerror = (e) => { console.warn('TTS error:', e.error); fin(); };
+sp.pending++;
+try { synth.speak(u); } catch (err) { sp.pending--; }
+}
+
+function retryPlain(sp) {
+if (sp.started || sp.done || sp.retried) return markStarted(sp);
+sp.retried = true; sp.retrying = true; sp.gen++; sp.pending = 0;
+try { window.speechSynthesis.cancel(); } catch (e) {}
+setTimeout(() => { if (!sp.done) sp.parts.forEach(p => speakPart(sp, p, true)); sp.retrying = false; }, 150);
+sp.startTimer = setTimeout(() => markStarted(sp), 3000);
+}
+
 function enqueueSpeech(text) {
 const sp = speech;
-const synth = window.speechSynthesis;
 if (!sp || sp.done) return;
 const clean = cleanForSpeech(text);
 if (!clean) return;
-const voices = synth.getVoices() || [];
-const parts = (clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(Boolean);
-parts.forEach(p => {
-const hindi = /[\u0900-\u097F]/.test(p);
-const u = new SpeechSynthesisUtterance(p);
-const v = pickVoice(voices, hindi);
-if (v) { u.voice = v; u.lang = v.lang; }
-else if (hindi) u.lang = 'hi-IN';
-sp.pending++; sp.chars += p.length;
-u.onstart = () => markStarted(sp);
-u.onend = () => { sp.pending--; checkSpeechDone(sp); };
-u.onerror = (e) => { console.warn('TTS error:', e.error); sp.pending--; checkSpeechDone(sp); };
-try { synth.speak(u); } catch (err) { sp.pending--; }
+(clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(Boolean).forEach(p => {
+sp.parts.push(p); sp.chars += p.length;
+if (!sp.retrying) speakPart(sp, p, sp.retried);
 });
-if (!sp.started && !sp.startTimer) sp.startTimer = setTimeout(() => markStarted(sp), 2500);
+if (!sp.started && !sp.startTimer) sp.startTimer = setTimeout(() => retryPlain(sp), 2500);
 armWatchdog(sp);
 }
 let main360Rot = 0, rot1 = 0, rot2 = 0, basePulse = 0;
