@@ -36,7 +36,7 @@ return {};
 })();
 const voxaBrainMemory = [{
 role: "system",
-content: "You are Voxa, a cute, sweet, cheerful girl voice assistant who talks like a real friend. Reply in the language the user just spoke: English for English. For Hindi or Hinglish use casual everyday Hindi in Devanagari, never formal words, keeping common words (phone, battery, charge, app, update, call, message, settings, internet, mobile, video, song, time) in English letters, e.g. तुम्हारे phone की battery 20 percent है, charge कर लो। If unsure, use English. Speech is auto-transcribed and may have small errors: infer the meaning; if truly unclear ask one short question. Start EVERY sentence with one emotion tag in square brackets from: [cheerful] [excited] [curious] [soft] [shy] [teasing] [sad] [surprised] [caring]. Optionally use ONE of <giggle> <laugh> <sigh> <gasp> <short pause> inside a sentence. Sound human: small fillers like hehe, umm, hmm, ellipses, one CAPITALIZED word for emphasis. Max 3 short sentences. No emojis, markdown or lists."
+content: "."
 }];
 const setStatus = (t) => { statusText.innerText = t; };
 const setThinking = (on) => voxaOrb.classList.toggle('thinking', on);
@@ -211,7 +211,7 @@ fd.append("model", "whisper-large-v3");
 fd.append("temperature", "0");
 fd.append("prompt", "यह हिंदी और English मिली हुई बातचीत है। मेरे phone की battery जल्दी खत्म हो जाती है, आज का weather कैसा है? Hello, how are you today?");
 const res = await fetch(PROXY_URL + "/transcribe", {
-method: "POST", body: fd
+method: "POST", body: fd, signal: AbortSignal.timeout(20000)
 });
 const data = await readJson(res);
 if (data.error) throw new UserError("Server Error: " + String((data.error && data.error.message) || data.error).slice(0, 60));
@@ -231,7 +231,7 @@ try {
 const res = await fetch(PROXY_URL + "/chat", {
 method: "POST",
 headers: { "Content-Type": "application/json" },
-body: JSON.stringify({ messages: voxaBrainMemory, stream: true })
+body: JSON.stringify({ messages: voxaBrainMemory, stream: true }), signal: AbortSignal.timeout(25000)
 });
 if (!res.ok || !res.body) {
 const t = await res.text().catch(() => '');
@@ -338,18 +338,21 @@ u.onend = u.onerror = () => cb();
 try { synth.speak(u); } catch (err) { cb(); }
 }
 async function fetchAudio(text, emo) {
-const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 12000);
+const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 9000);
 try {
 const r = await fetch(PROXY_URL + "/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, emo }), signal: ctl.signal });
 if (!r.ok) throw new Error('speak ' + r.status);
 return await audioCtx.decodeAudioData(await r.arrayBuffer());
 } finally { clearTimeout(t); }
 }
-function playBuffer(sp, buf) {
+async function playBuffer(sp, buf) {
+if (audioCtx.state !== 'running') await ensureRunning();
+if (audioCtx.state !== 'running') throw new Error('audio locked');
 return new Promise(res => {
 const src = audioCtx.createBufferSource();
 src.buffer = buf; src.connect(audioCtx.destination); src.onended = res;
-sp.src = src; markStarted(sp); src.start();
+sp.src = src; src.start(); markStarted(sp);
+setTimeout(res, buf.duration * 1000 + 2000);
 });
 }
 function queueSpeech(sp, p, emo) {
@@ -412,3 +415,4 @@ initAudio();
 </script>
 </body>
 </html>
+p
