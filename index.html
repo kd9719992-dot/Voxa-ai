@@ -96,7 +96,6 @@ box-shadow: inset 0 0 15px rgba(0, 243, 255, 0.3);
 will-change: transform;
 transition: background 0.5s ease;
 }
-/* Thinking State Override */
 .thinking .outer-glow {
 background: radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, rgba(0, 0, 0, 0) 70%);
 box-shadow: 0 0 35px rgba(168, 85, 247, 0.6), inset 0 0 15px rgba(168, 85, 247, 0.4);
@@ -124,13 +123,10 @@ background: radial-gradient(circle at 35% 35%, rgba(168, 85, 247, 0.4), rgba(2, 
 </div>
 <div class="status-text" id="statusText">Starting...</div>
 <script>
-// Your proxy URL (Cloudflare Worker). No API key lives in this file.
 const PROXY_URL = "https://voxa-proxy.termuxoffical999.workers.dev";
 const $ = (id) => document.getElementById(id);
 const voxaOrb = $('voxaOrb'), glow = $('glow'), core = $('core'),
 boundary = $('boundary'), w1 = $('w1'), w2 = $('w2'), statusText = $('statusText');
-// ---------- State ----------
-// boot | needs-tap | listening | thinking | speaking
 let state = 'boot';
 let audioCtx = null, analyser = null, stream = null, timeData = null, initPromise = null;
 let currentSegment = null, segmentStartedAt = 0;
@@ -150,11 +146,9 @@ content: "You are Voxa, a friendly voice assistant. Reply in the same language t
 }];
 const setStatus = (t) => { statusText.innerText = t; };
 const setThinking = (on) => voxaOrb.classList.toggle('thinking', on);
-// ---------- Mic + AudioContext lifecycle ----------
 async function ensureRunning() {
 if (!audioCtx) return false;
 if (audioCtx.state !== 'running') {
-// resume() can hang forever without a user gesture, so never await it unguarded
 await Promise.race([
 audioCtx.resume().catch(() => {}),
 new Promise(r => setTimeout(r, 500))
@@ -172,7 +166,7 @@ state = 'boot';
 }
 let micHint = null;
 function initAudio() {
-if (initPromise) return initPromise;       // prevents duplicate mic/context creation
+if (initPromise) return initPromise;
 initPromise = (async () => {
 try {
 micHint = setTimeout(() => setStatus('Allow microphone permission...'), 3500);
@@ -186,7 +180,7 @@ teardown();
 setStatus('Mic disconnected - tap to retry');
 }));
 const AC = window.AudioContext || window.webkitAudioContext;
-audioCtx = new AC();                    // default rate: avoids sample-rate mismatch errors
+audioCtx = new AC();
 audioCtx.addEventListener('statechange', onCtxStateChange);
 analyser = audioCtx.createAnalyser();
 analyser.fftSize = 1024;
@@ -214,7 +208,7 @@ if (!ok && state === 'listening') { stopSegment(true); state = 'needs-tap'; setS
 }
 }
 let ttsWarmed = false;
-function warmTTS() {                                   // first tap: wake the speech engine so first reply starts fast
+function warmTTS() {
 if (ttsWarmed || !window.speechSynthesis) return;
 ttsWarmed = true;
 try {
@@ -230,7 +224,7 @@ if (gestureBusy) return;
 gestureBusy = true;
 warmTTS();
 try {
-if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); // inside the gesture
+if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
 if (!initPromise) await initAudio();
 if (await ensureRunning() && state === 'needs-tap') enterListening();
 } finally { gestureBusy = false; }
@@ -240,7 +234,6 @@ document.addEventListener(ev, onUserGesture, { passive: true }));
 document.addEventListener('visibilitychange', () => {
 if (!document.hidden && audioCtx) ensureRunning().then(ok => { if (ok && state === 'needs-tap') enterListening(); });
 });
-// ---------- Recording (fresh recorder per segment) ----------
 function startSegment() {
 stopSegment(true);
 if (!stream || typeof MediaRecorder === 'undefined') return;
@@ -276,7 +269,6 @@ setThinking(false);
 if (!audioCtx || audioCtx.state !== 'running') { state = 'needs-tap'; setStatus('Tap to start'); return; }
 enterListening();
 }
-// ---------- Voice activity detection (runs on a timer, not rAF) ----------
 function detect() {
 if (!analyser || !audioCtx || audioCtx.state !== 'running') { voiceVolume = 0; return; }
 analyser.getByteTimeDomainData(timeData);
@@ -285,7 +277,7 @@ for (let i = 0; i < timeData.length; i++) { const v = (timeData[i] - 128) / 128;
 const level = Math.sqrt(sum / timeData.length);
 if (state !== 'listening') { voiceVolume = 0; return; }
 const now = performance.now();
-const threshold = Math.max(0.025, noiseFloor * 2.5 + 0.01);       // adapts to room noise
+const threshold = Math.max(0.025, noiseFloor * 2.5 + 0.01);
 const loud = level > (isUserSpeaking ? threshold * 0.7 : threshold);
 if (!loud && !isUserSpeaking) noiseFloor = noiseFloor * 0.97 + level * 0.03;
 voiceVolume = loud ? Math.max(0.2, Math.min(0.4 + (level - threshold) / 0.04, 2)) : 0;
@@ -297,20 +289,19 @@ if (isUserSpeaking && now - speechStartedAt > MAX_UTTERANCE_MS) finishUtterance(
 } else {
 aboveSince = 0;
 if (isUserSpeaking && now - lastVoiceAt >= SILENCE_MS) finishUtterance();
-else if (!isUserSpeaking && now - segmentStartedAt > IDLE_RECYCLE_MS) startSegment(); // drop old silence
+else if (!isUserSpeaking && now - segmentStartedAt > IDLE_RECYCLE_MS) startSegment();
 }
 }
 setInterval(detect, 40);
 function finishUtterance() {
 const speechMs = lastVoiceAt - speechStartedAt;
 isUserSpeaking = false; aboveSince = 0;
-if (speechMs < MIN_SPEECH_MS) { startSegment(); return; }   // click / cough / noise blip
-state = 'thinking';                                          // set immediately: no race window
+if (speechMs < MIN_SPEECH_MS) { startSegment(); return; }
+state = 'thinking';
 setThinking(true);
 setStatus('Voxa Thinking...');
-stopSegment(false);                                          // onstop -> handleUtterance
+stopSegment(false);
 }
-// ---------- Groq pipeline ----------
 class UserError extends Error {}
 async function readJson(res) {
 const t = await res.text();
@@ -346,12 +337,12 @@ return (data.text || '').trim();
 }
 async function streamReply(userPrompt) {
 voxaBrainMemory.push({ role: "user", content: userPrompt });
-if (voxaBrainMemory.length > 7) voxaBrainMemory.splice(1, voxaBrainMemory.length - 7);  // system + last 6
+if (voxaBrainMemory.length > 7) voxaBrainMemory.splice(1, voxaBrainMemory.length - 7);
 const synth = window.speechSynthesis;
 let full = '', buf = '', started = false;
 const emit = (sentence) => {
 if (!synth) return;
-if (!started) { started = true; startSpeech(); }   // first sentence -> speak immediately
+if (!started) { started = true; startSpeech(); }
 enqueueSpeech(sentence);
 };
 try {
@@ -391,34 +382,32 @@ while ((m = buf.match(/^([\s\S]*?[.!?।])\s+/))) { emit(m[1]); buf = buf.slice(
 }
 }
 if (buf.trim()) emit(buf);
-if (!full.trim() && raw.trim()) {
-try {
-const j = JSON.parse(raw);
-if (j.error) throw new UserError('Brain: ' + String(j.error.message || j.error).slice(0, 60));
-const c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
-if (c) { full = c; emit(c); }
-} catch (e) { if (e instanceof UserError) throw e; }
+if (!full.trim()) {
+const r2 = await fetch(PROXY_URL + "/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: voxaBrainMemory }) });
+const j2 = await readJson(r2);
+if (j2.error) throw new UserError('Brain: ' + String(j2.error.message || j2.error).slice(0, 60));
+const c2 = j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content;
+if (c2) { full = c2; emit(c2); }
 }
 if (!full.trim()) throw new UserError('Brain Error: empty (' + (fin || 'no finish') + (sawR ? ', thinking only' : '') + ', ' + raw.length + 'B)');
 voxaBrainMemory.push({ role: "assistant", content: full });
 if (started) endSpeechStream(); else backToListening();
 } catch (e) {
-if (started) {                                   // already speaking: let it finish, keep what we have
+if (started) {
 if (full.trim()) voxaBrainMemory.push({ role: "assistant", content: full });
 endSpeechStream();
 return;
 }
-voxaBrainMemory.pop();                           // keep user/assistant turns alternating
+voxaBrainMemory.pop();
 throw e;
 }
 }
-// ---------- Speech (speaks each sentence as it arrives) ----------
 function cleanForSpeech(t) {
 return String(t).replace(/[*_#`~>|]/g, ' ').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
 }
 function pickVoice(voices, hindi) {
 const want = hindi ? 'hi' : 'en';
-const score = (v) => (v.localService ? 2 : 0) + (!hindi && v.lang === 'en-IN' ? 1 : 0);   // local voices start fastest
+const score = (v) => (v.localService ? 2 : 0) + (!hindi && v.lang === 'en-IN' ? 1 : 0);
 const list = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(want)).sort((a, b) => score(b) - score(a));
 return list[0];
 }
@@ -429,13 +418,13 @@ try { if (synth.speaking || synth.pending) synth.cancel(); } catch (e) {}
 try { if (synth.paused) synth.resume(); } catch (e) {}
 speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null, started: false, startTimer: null };
 }
-function markStarted(sp) {                             // show "Speaking" only when sound really begins
+function markStarted(sp) {
 if (sp.started || sp.done) return;
 sp.started = true;
 clearTimeout(sp.startTimer);
 if (speech === sp) { state = 'speaking'; setThinking(false); setStatus('Voxa Speaking...'); }
 }
-function armWatchdog(sp) {                             // onend sometimes never fires
+function armWatchdog(sp) {
 clearTimeout(sp.watchdog);
 sp.watchdog = setTimeout(() => finishSpeech(sp), 8000 + sp.chars * 150);
 }
@@ -444,7 +433,7 @@ if (!sp || sp.done) return;
 sp.done = true;
 clearTimeout(sp.watchdog);
 try { window.speechSynthesis.cancel(); } catch (e) {}
-setTimeout(backToListening, 350);                    // let speaker tail die so mic doesn't hear it
+setTimeout(backToListening, 350);
 }
 function checkSpeechDone(sp) { if (sp.streamEnded && sp.pending <= 0) finishSpeech(sp); }
 function endSpeechStream() {
@@ -461,21 +450,20 @@ if (!clean) return;
 const voices = synth.getVoices() || [];
 const parts = (clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(Boolean);
 parts.forEach(p => {
-const hindi = /[\u0900-\u097F]/.test(p);           // Devanagari -> Hindi voice, else English voice
+const hindi = /[\u0900-\u097F]/.test(p);
 const u = new SpeechSynthesisUtterance(p);
 const v = pickVoice(voices, hindi);
 if (v) { u.voice = v; u.lang = v.lang; }
-else if (hindi) u.lang = 'hi-IN';                  // English with no matching voice: device default
+else if (hindi) u.lang = 'hi-IN';
 sp.pending++; sp.chars += p.length;
 u.onstart = () => markStarted(sp);
 u.onend = () => { sp.pending--; checkSpeechDone(sp); };
 u.onerror = (e) => { console.warn('TTS error:', e.error); sp.pending--; checkSpeechDone(sp); };
 try { synth.speak(u); } catch (err) { sp.pending--; }
 });
-if (!sp.started && !sp.startTimer) sp.startTimer = setTimeout(() => markStarted(sp), 2500);  // engines without onstart
+if (!sp.started && !sp.startTimer) sp.startTimer = setTimeout(() => markStarted(sp), 2500);
 armWatchdog(sp);
 }
-// ---------- Orb animation ----------
 let main360Rot = 0, rot1 = 0, rot2 = 0, basePulse = 0;
 let currentSpeed = 0.6, currentScale = 1.0, currentGlow = 25, coreGlowScale = 1.0;
 const lerp = (a, b, t) => (1 - t) * a + t * b;
@@ -513,4 +501,3 @@ initAudio();
 </script>
 </body>
 </html>
-  
