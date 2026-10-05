@@ -4,114 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Voxa AI</title>
-<style>
-* {
-margin: 0;
-padding: 0;
-box-sizing: border-box;
--webkit-tap-highlight-color: transparent;
-}
-body {
-background-color: #02060d;
-height: 100vh;
-width: 100vw;
-display: flex;
-flex-direction: column;
-justify-content: center;
-align-items: center;
-overflow: hidden;
-font-family: Arial, sans-serif;
-}
-.status-text {
-position: absolute;
-bottom: 18%;
-color: rgba(0, 243, 255, 0.7);
-font-size: 14px;
-letter-spacing: 1px;
-text-transform: uppercase;
-transition: color 0.3s ease;
-text-align: center;
-}
-.voxa-container {
-position: relative;
-width: 150px;
-height: 150px;
-display: flex;
-justify-content: center;
-align-items: center;
-will-change: transform;
-cursor: pointer;
-outline: none;
-user-select: none;
--webkit-user-select: none;
-}
-.outer-glow {
-position: absolute;
-width: 100%;
-height: 100%;
-border-radius: 50%;
-background: radial-gradient(circle, rgba(0, 243, 255, 0.25) 0%, rgba(0, 0, 0, 0) 70%);
-box-shadow: 0 0 25px rgba(0, 243, 255, 0.4), inset 0 0 15px rgba(0, 243, 255, 0.3);
-will-change: transform, box-shadow;
-transition: background 0.5s ease, box-shadow 0.5s ease;
-}
-.sphere-boundary {
-position: absolute;
-width: 130px;
-height: 130px;
-border-radius: 50%;
-border: 1.5px solid rgba(0, 243, 255, 0.85);
-box-shadow: 0 0 12px #00f3ff, inset 0 0 14px #00f3ff;
-filter: drop-shadow(0 0 8px #00f3ff);
-will-change: transform;
-transition: border-color 0.5s ease, box-shadow 0.5s ease;
-}
-.wave-1 {
-position: absolute;
-width: 125px;
-height: 125px;
-border-radius: 40% 45% 43% 47%;
-border: 1.8px solid rgba(0, 243, 255, 0.75);
-box-shadow: inset 0 0 8px rgba(0, 243, 255, 0.5);
-will-change: transform;
-transition: border-color 0.5s ease;
-}
-.wave-2 {
-position: absolute;
-width: 127px;
-height: 127px;
-border-radius: 46% 42% 44% 40%;
-border: 1.5px solid rgba(0, 200, 255, 0.65);
-filter: blur(0.6px);
-will-change: transform;
-transition: border-color 0.5s ease;
-}
-.inner-core {
-position: absolute;
-width: 120px;
-height: 120px;
-border-radius: 50%;
-background: radial-gradient(circle at 35% 35%, rgba(0, 243, 255, 0.35), rgba(2, 6, 13, 0.95) 75%);
-box-shadow: inset 0 0 15px rgba(0, 243, 255, 0.3);
-will-change: transform;
-transition: background 0.5s ease;
-}
-.thinking .outer-glow {
-background: radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, rgba(0, 0, 0, 0) 70%);
-box-shadow: 0 0 35px rgba(168, 85, 247, 0.6), inset 0 0 15px rgba(168, 85, 247, 0.4);
-}
-.thinking .sphere-boundary {
-border-color: rgba(168, 85, 247, 0.9);
-box-shadow: 0 0 15px #a855f7, inset 0 0 14px #a855f7;
-filter: drop-shadow(0 0 10px #a855f7);
-}
-.thinking .wave-1, .thinking .wave-2 {
-border-color: rgba(192, 132, 252, 0.8);
-}
-.thinking .inner-core {
-background: radial-gradient(circle at 35% 35%, rgba(168, 85, 247, 0.4), rgba(2, 6, 13, 0.95) 75%);
-}
-</style>
+<style>*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{background-color:#02060d;height:100vh;width:100vw;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden;font-family:Arial,sans-serif}.status-text{position:absolute;bottom:18%;color:rgba(0,243,255,0.7);font-size:14px;letter-spacing:1px;text-transform:uppercase;transition:color 0.3s ease;text-align:center}.voxa-container{position:relative;width:150px;height:150px;display:flex;justify-content:center;align-items:center;will-change:transform;cursor:pointer;outline:none;user-select:none;-webkit-user-select:none}.outer-glow{position:absolute;width:100%;height:100%;border-radius:50%;background:radial-gradient(circle,rgba(0,243,255,0.25) 0%,rgba(0,0,0,0) 70%);box-shadow:0 0 25px rgba(0,243,255,0.4),inset 0 0 15px rgba(0,243,255,0.3);will-change:transform,box-shadow;transition:background 0.5s ease,box-shadow 0.5s ease}.sphere-boundary{position:absolute;width:130px;height:130px;border-radius:50%;border:1.5px solid rgba(0,243,255,0.85);box-shadow:0 0 12px #00f3ff,inset 0 0 14px #00f3ff;filter:drop-shadow(0 0 8px #00f3ff);will-change:transform;transition:border-color 0.5s ease,box-shadow 0.5s ease}.wave-1{position:absolute;width:125px;height:125px;border-radius:40% 45% 43% 47%;border:1.8px solid rgba(0,243,255,0.75);box-shadow:inset 0 0 8px rgba(0,243,255,0.5);will-change:transform;transition:border-color 0.5s ease}.wave-2{position:absolute;width:127px;height:127px;border-radius:46% 42% 44% 40%;border:1.5px solid rgba(0,200,255,0.65);filter:blur(0.6px);will-change:transform;transition:border-color 0.5s ease}.inner-core{position:absolute;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(0,243,255,0.35),rgba(2,6,13,0.95) 75%);box-shadow:inset 0 0 15px rgba(0,243,255,0.3);will-change:transform;transition:background 0.5s ease}.thinking .outer-glow{background:radial-gradient(circle,rgba(168,85,247,0.35) 0%,rgba(0,0,0,0) 70%);box-shadow:0 0 35px rgba(168,85,247,0.6),inset 0 0 15px rgba(168,85,247,0.4)}.thinking .sphere-boundary{border-color:rgba(168,85,247,0.9);box-shadow:0 0 15px #a855f7,inset 0 0 14px #a855f7;filter:drop-shadow(0 0 10px #a855f7)}.thinking .wave-1,.thinking .wave-2{border-color:rgba(192,132,252,0.8)}.thinking .inner-core{background:radial-gradient(circle at 35% 35%,rgba(168,85,247,0.4),rgba(2,6,13,0.95) 75%)}</style>
 </head>
 <body>
 <div class="voxa-container" id="voxaOrb">
@@ -143,7 +36,7 @@ return {};
 })();
 const voxaBrainMemory = [{
 role: "system",
-content: "You are Voxa, a cute, sweet and cheerful voice assistant. Reply in the language the user just spoke: English for English. For Hindi or Hinglish, speak casual everyday Hindi in Devanagari, the way friends talk, never formal or Sanskrit-style words. Keep everyday tech and common words in English letters, for example phone, battery, charge, app, update, call, message, settings, internet, mobile, video, song, time. Example: तुम्हारे phone की battery 20 percent है, charge कर लो। If the language is unclear, use English. The user's speech is auto-transcribed and may have small errors, so infer the intended meaning; if truly unclear, ask one short question. In English use clear, natural, warm English. Keep replies to 1-3 short, warm spoken sentences. Never use emojis, markdown, asterisks or lists."
+content: "You are Voxa, a cute, sweet, cheerful girl voice assistant who talks like a real friend. Reply in the language the user just spoke: English for English. For Hindi or Hinglish use casual everyday Hindi in Devanagari, never formal words, keeping common words (phone, battery, charge, app, update, call, message, settings, internet, mobile, video, song, time) in English letters, e.g. तुम्हारे phone की battery 20 percent है, charge कर लो। If unsure, use English. Speech is auto-transcribed and may have small errors: infer the meaning; if truly unclear ask one short question. Start EVERY sentence with one emotion tag in square brackets from: [cheerful] [excited] [curious] [soft] [shy] [teasing] [sad] [surprised] [caring]. Optionally use ONE of <giggle> <laugh> <sigh> <gasp> <short pause> inside a sentence. Sound human: small fillers like hehe, umm, hmm, ellipses, one CAPITALIZED word for emphasis. Max 3 short sentences. No emojis, markdown or lists."
 }];
 const setStatus = (t) => { statusText.innerText = t; };
 const setThinking = (on) => voxaOrb.classList.toggle('thinking', on);
@@ -392,7 +285,7 @@ throw e;
 }
 }
 function cleanForSpeech(t) {
-return String(t).replace(/[*_#`~>|]/g, ' ').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
+return String(t).replace(/\[[^\]]*\]/g, ' ').replace(/[*_#`~|]/g, ' ').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
 }
 function pickVoice(voices, hindi) {
 const want = hindi ? 'hi' : 'en';
@@ -405,7 +298,7 @@ function startSpeech() {
 const synth = window.speechSynthesis;
 try { if (synth && (synth.speaking || synth.pending)) synth.cancel(); } catch (e) {}
 playChain = Promise.resolve();
-speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null, started: false, src: null };
+speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null, started: false, src: null, emo: 'cheerful' };
 }
 function markStarted(sp) {
 if (sp.started || sp.done) return;
@@ -433,6 +326,8 @@ checkSpeechDone(speech);
 function speakPart(sp, p, cb) {
 const synth = window.speechSynthesis;
 if (!synth) return cb();
+p = p.replace(/<[^>]*>/g, ' ').trim();
+if (!p) return cb();
 const hindi = /[\u0900-\u097F]/.test(p);
 const u = new SpeechSynthesisUtterance(p);
 u.pitch = VOICE_PITCH; u.rate = VOICE_RATE;
@@ -442,10 +337,10 @@ u.onstart = () => markStarted(sp);
 u.onend = u.onerror = () => cb();
 try { synth.speak(u); } catch (err) { cb(); }
 }
-async function fetchAudio(text) {
+async function fetchAudio(text, emo) {
 const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 12000);
 try {
-const r = await fetch(PROXY_URL + "/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }), signal: ctl.signal });
+const r = await fetch(PROXY_URL + "/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, emo }), signal: ctl.signal });
 if (!r.ok) throw new Error('speak ' + r.status);
 return await audioCtx.decodeAudioData(await r.arrayBuffer());
 } finally { clearTimeout(t); }
@@ -457,9 +352,9 @@ src.buffer = buf; src.connect(audioCtx.destination); src.onended = res;
 sp.src = src; markStarted(sp); src.start();
 });
 }
-function queueSpeech(sp, p) {
+function queueSpeech(sp, p, emo) {
 sp.pending++;
-const job = NEURAL_TTS ? fetchAudio(p) : Promise.reject(new Error('off'));
+const job = NEURAL_TTS ? fetchAudio(p, emo) : Promise.reject(new Error('off'));
 job.catch(() => {});
 playChain = playChain.then(async () => {
 if (sp.done) return;
@@ -473,9 +368,11 @@ if (!sp.done) await Promise.race([new Promise(r => speakPart(sp, p, r)), new Pro
 function enqueueSpeech(text) {
 const sp = speech;
 if (!sp || sp.done) return;
+const em = text.match(/^\s*\[([^\]]{2,20})\]/);
+if (em) sp.emo = em[1].toLowerCase().trim();
 const clean = cleanForSpeech(text);
 if (!clean) return;
-(clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(Boolean).forEach(p => { sp.chars += p.length; queueSpeech(sp, p); });
+(clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(Boolean).forEach(p => { sp.chars += p.length; queueSpeech(sp, p, sp.emo); });
 armWatchdog(sp);
 }
 let main360Rot = 0, rot1 = 0, rot2 = 0, basePulse = 0;
@@ -514,5 +411,4 @@ render();
 initAudio();
 </script>
 </body>
-  </html>
-  
+</html>
