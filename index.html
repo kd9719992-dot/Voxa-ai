@@ -7,7 +7,7 @@
 <style>*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{--c:0,243,255}
 body{background:#02060d;height:100vh;width:100vw;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden;font-family:Arial,sans-serif;transition:background .8s}
-body.admin-on{--c:125,211,252;background:radial-gradient(circle at 50% 45%,#07324d,#02060d 72%)}
+body.admin-on{--c:125,211,252;background-color:#02060d;background-image:radial-gradient(circle at 50% 45%,rgba(7,50,77,.9),#02060d 72%),linear-gradient(rgba(var(--c),.07) 1px,transparent 1px),linear-gradient(90deg,rgba(var(--c),.07) 1px,transparent 1px);background-size:100% 100%,38px 38px,38px 38px;animation:gd 6s linear infinite;box-shadow:inset 0 0 90px rgba(var(--c),.3)}
 .status-text{position:absolute;bottom:18%;color:rgba(var(--c),.7);font-size:14px;letter-spacing:1px;text-transform:uppercase;text-align:center;padding:0 16px}
 .voxa-container{position:relative;width:150px;height:150px;display:flex;justify-content:center;align-items:center;will-change:transform;cursor:pointer;user-select:none;-webkit-user-select:none}
 .voxa-container.thinking{--c:168,85,247}
@@ -20,7 +20,20 @@ body.admin-on{--c:125,211,252;background:radial-gradient(circle at 50% 45%,#0732
 .admin-on .voxa-container::before,.admin-on .voxa-container::after{content:"";position:absolute;border-radius:50%;border:2px dashed rgba(var(--c),.8)}
 .admin-on .voxa-container::before{inset:-26px;animation:sp 12s linear infinite}
 .admin-on .voxa-container::after{inset:-14px;border-style:dotted;animation:sp 7s linear infinite reverse}
-@keyframes sp{to{transform:rotate(360deg)}}</style>
+@keyframes sp{to{transform:rotate(360deg)}}
+@keyframes gd{to{background-position:0 0,0 38px,38px 0}}
+@keyframes sc{to{top:100%}}
+@keyframes bk{50%{opacity:.35}}
+@keyframes fl{0%{filter:brightness(3.5) saturate(2)}100%{filter:none}}
+@keyframes bm{0%{scale:.3}55%{scale:1.45}100%{scale:1}}
+body.admin-on::after{content:"";position:fixed;left:0;right:0;top:-90px;height:90px;background:linear-gradient(transparent,rgba(var(--c),.2),transparent);animation:sc 3.5s linear infinite;pointer-events:none}
+body.admin-on::before{content:"ADMIN MODE  \2022  FULL POWER";position:fixed;top:7%;left:0;right:0;text-align:center;letter-spacing:6px;font-size:12px;color:rgb(var(--c));text-shadow:0 0 12px rgb(var(--c));animation:bk 2s ease-in-out infinite}
+.admin-on .status-text{text-shadow:0 0 12px rgb(var(--c));letter-spacing:3px}
+.admin-on .sphere-boundary::before,.admin-on .sphere-boundary::after{content:"";position:absolute;border-radius:50%;border:2px solid transparent;border-top-color:rgb(var(--c));border-left-color:rgba(var(--c),.4)}
+.admin-on .sphere-boundary::before{inset:-48px;animation:sp 2.4s linear infinite}
+.admin-on .sphere-boundary::after{inset:-70px;animation:sp 4s linear infinite reverse}
+body.boom{animation:fl 1.3s}
+.boom .voxa-container{animation:bm 1.3s}</style>
 </head>
 <body>
 <div class="voxa-container" id="voxaOrb">
@@ -37,158 +50,157 @@ const $ = (id) => document.getElementById(id);
 const voxaOrb = $('voxaOrb'), glow = $('glow'), core = $('core'),
 boundary = $('boundary'), w1 = $('w1'), w2 = $('w2'), statusText = $('statusText');
 let state = 'boot';
-let audioCtx = null, analyser = null, stream = null, timeData = null, initPromise = null;
-let currentSegment = null, segmentStartedAt = 0;
-let noiseFloor = 0.01, aboveSince = 0, lastVoiceAt = 0, speechStartedAt = 0;
-let isUserSpeaking = false, voiceVolume = 0;
-let adminOn = false, adminToken = '', adminStep = 0, adminTries = 0;
-const SILENCE_MS = 700, MIN_SPEECH_MS = 350, ONSET_MS = 150, IDLE_RECYCLE_MS = 4000, MAX_UTTERANCE_MS = 30000;
-const VOICE_PITCH = 1.35, VOICE_RATE = 1.05, NEURAL_TTS = true;
-const recorderOptions = (() => {
+let _a = null, _i = null, stream = null, _p = null, _f = null;
+let _l = null, _o = 0;
+let _v = 0.01, _e = 0, _u = 0, _j = 0;
+let _b = false, _m = 0;
+let adminOn = false, _n = '', adminStep = 0, adminTries = 0, adminVoice = 'pro', adminAt = 0;
+const SILENCE_MS = 700, _l1 = 350, ONSET_MS = 150, _f1 = 4000, _c1 = 30000;
+const _e1 = (() => {
 if (typeof MediaRecorder === 'undefined') return {};
 for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']) {
 if (MediaRecorder.isTypeSupported(t)) return { mimeType: t };
 }
 return {};
 })();
-const voxaBrainMemory = [{
+const _c = [{
 role: "system",
 content: "."
 }];
 const setStatus = (t) => { statusText.innerText = t; };
 const setThinking = (on) => voxaOrb.classList.toggle('thinking', on);
-async function ensureRunning() {
-if (!audioCtx) return false;
-if (audioCtx.state !== 'running') {
+async function _h() {
+if (!_a) return false;
+if (_a.state !== 'running') {
 await Promise.race([
-audioCtx.resume().catch(() => {}),
+_a.resume().catch(() => {}),
 new Promise(r => setTimeout(r, 500))
 ]);
 }
-return audioCtx.state === 'running';
+return _a.state === 'running';
 }
-function teardown() {
+function _m1() {
 stopSegment(true);
 if (stream) stream.getTracks().forEach(t => t.stop());
-if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
-stream = audioCtx = analyser = null;
-initPromise = null;
+if (_a && _a.state !== 'closed') _a.close().catch(() => {});
+stream = _a = _i = null;
+_f = null;
 state = 'boot';
 }
-function initAudio() {
-if (initPromise) return initPromise;
-initPromise = (async () => {
+function _i1() {
+if (_f) return _f;
+_f = (async () => {
 try {
 stream = await navigator.mediaDevices.getUserMedia({
 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
 video: false
 });
 stream.getAudioTracks().forEach(t => t.addEventListener('ended', () => {
-teardown();
+_m1();
 setStatus('Mic disconnected - tap to retry');
 }));
 const AC = window.AudioContext || window.webkitAudioContext;
-audioCtx = new AC();
-audioCtx.addEventListener('statechange', onCtxStateChange);
-analyser = audioCtx.createAnalyser();
-analyser.fftSize = 1024;
-audioCtx.createMediaStreamSource(stream).connect(analyser);
-timeData = new Uint8Array(analyser.fftSize);
-if (await ensureRunning()) enterListening();
+_a = new AC();
+_a.addEventListener('statechange', _b1);
+_i = _a.createAnalyser();
+_i.fftSize = 1024;
+_a.createMediaStreamSource(stream).connect(_i);
+_p = new Uint8Array(_i.fftSize);
+if (await _h()) _g();
 else { state = 'needs-tap'; setStatus('Tap to start'); }
 } catch (err) {
 console.error('Mic init error:', err);
 const denied = err && err.name === 'NotAllowedError';
-teardown();
+_m1();
 setStatus(denied ? 'Mic Permission Denied - tap to retry' : 'Mic Error - tap to retry');
 }
 })();
-return initPromise;
+return _f;
 }
-function onCtxStateChange() {
-if (!audioCtx) return;
-if (audioCtx.state === 'running' && state === 'needs-tap') enterListening();
-else if (audioCtx.state !== 'running' && state === 'listening') {
-ensureRunning().then(ok => {
+function _b1() {
+if (!_a) return;
+if (_a.state === 'running' && state === 'needs-tap') _g();
+else if (_a.state !== 'running' && state === 'listening') {
+_h().then(ok => {
 if (!ok && state === 'listening') { stopSegment(true); state = 'needs-tap'; setStatus('Tap to start'); }
 });
 }
 }
-let gestureBusy = false;
+let _t = false;
 async function onUserGesture() {
-if (gestureBusy) return;
-gestureBusy = true;
+if (_t) return;
+_t = true;
 try {
-if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
-if (!initPromise) await initAudio();
-if (await ensureRunning() && state === 'needs-tap') enterListening();
-} finally { gestureBusy = false; }
+if (_a && _a.state !== 'running') _a.resume().catch(() => {});
+if (!_f) await _i1();
+if (await _h() && state === 'needs-tap') _g();
+} finally { _t = false; }
 }
 ['pointerdown', 'touchend', 'click', 'keydown'].forEach(ev =>
 document.addEventListener(ev, onUserGesture, { passive: true }));
-function startSegment() {
+function _q() {
 stopSegment(true);
 if (!stream || typeof MediaRecorder === 'undefined') return;
 const chunks = [];
 let rec;
-try { rec = new MediaRecorder(stream, recorderOptions); } catch (e) { rec = new MediaRecorder(stream); }
+try { rec = new MediaRecorder(stream, _e1); } catch (e) { rec = new MediaRecorder(stream); }
 const seg = { rec, discard: false };
 rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
 rec.onstop = () => {
 if (seg.discard || !chunks.length) return;
-handleUtterance(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+_d1(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
 };
 rec.start();
-currentSegment = seg;
-segmentStartedAt = performance.now();
+_l = seg;
+_o = performance.now();
 }
 function stopSegment(discard) {
-const seg = currentSegment;
-currentSegment = null;
+const seg = _l;
+_l = null;
 if (!seg) return;
 seg.discard = discard;
 if (seg.rec.state !== 'inactive') { try { seg.rec.stop(); } catch (e) {} }
 }
-function enterListening() {
+function _g() {
 state = 'listening';
-isUserSpeaking = false; aboveSince = 0;
+_b = false; _e = 0;
 setThinking(false);
 setStatus('Listening...');
-startSegment();
+_q();
 }
-function backToListening() {
+function _d() {
 setThinking(false);
-if (!audioCtx || audioCtx.state !== 'running') { state = 'needs-tap'; setStatus('Tap to start'); return; }
-enterListening();
+if (!_a || _a.state !== 'running') { state = 'needs-tap'; setStatus('Tap to start'); return; }
+_g();
 }
-function detect() {
-if (!analyser || !audioCtx || audioCtx.state !== 'running') { voiceVolume = 0; return; }
-analyser.getByteTimeDomainData(timeData);
+function _s1() {
+if (!_i || !_a || _a.state !== 'running') { _m = 0; return; }
+_i.getByteTimeDomainData(_p);
 let sum = 0;
-for (let i = 0; i < timeData.length; i++) { const v = (timeData[i] - 128) / 128; sum += v * v; }
-const level = Math.sqrt(sum / timeData.length);
-if (state !== 'listening') { voiceVolume = 0; return; }
+for (let i = 0; i < _p.length; i++) { const v = (_p[i] - 128) / 128; sum += v * v; }
+const level = Math.sqrt(sum / _p.length);
+if (state !== 'listening') { _m = 0; return; }
 const now = performance.now();
-const threshold = Math.max(0.025, noiseFloor * 2.5 + 0.01);
-const loud = level > (isUserSpeaking ? threshold * 0.7 : threshold);
-if (!loud && !isUserSpeaking) noiseFloor = noiseFloor * 0.97 + level * 0.03;
-voiceVolume = loud ? Math.max(0.2, Math.min(0.4 + (level - threshold) / 0.04, 2)) : 0;
+const threshold = Math.max(0.025, _v * 2.5 + 0.01);
+const loud = level > (_b ? threshold * 0.7 : threshold);
+if (!loud && !_b) _v = _v * 0.97 + level * 0.03;
+_m = loud ? Math.max(0.2, Math.min(0.4 + (level - threshold) / 0.04, 2)) : 0;
 if (loud) {
-lastVoiceAt = now;
-if (!aboveSince) aboveSince = now;
-if (!isUserSpeaking && now - aboveSince >= ONSET_MS) { isUserSpeaking = true; speechStartedAt = aboveSince; }
-if (isUserSpeaking && now - speechStartedAt > MAX_UTTERANCE_MS) finishUtterance();
+_u = now;
+if (!_e) _e = now;
+if (!_b && now - _e >= ONSET_MS) { _b = true; _j = _e; }
+if (_b && now - _j > _c1) _r();
 } else {
-aboveSince = 0;
-if (isUserSpeaking && now - lastVoiceAt >= SILENCE_MS) finishUtterance();
-else if (!isUserSpeaking && now - segmentStartedAt > IDLE_RECYCLE_MS) startSegment();
+_e = 0;
+if (_b && now - _u >= SILENCE_MS) _r();
+else if (!_b && now - _o > _f1) _q();
 }
 }
-setInterval(detect, 40);
-function finishUtterance() {
-const speechMs = lastVoiceAt - speechStartedAt;
-isUserSpeaking = false; aboveSince = 0;
-if (speechMs < MIN_SPEECH_MS) { startSegment(); return; }
+setInterval(_s1, 40);
+function _r() {
+const speechMs = _u - _j;
+_b = false; _e = 0;
+if (speechMs < _l1) { _q(); return; }
 state = 'thinking';
 setThinking(true);
 setStatus('Voxa Thinking...');
@@ -200,47 +212,56 @@ const t = await res.text();
 try { return JSON.parse(t); }
 catch (e) { throw new UserError('Server ' + res.status + ': ' + t.slice(0, 40)); }
 }
-async function handleUtterance(blob) {
+async function _d1(blob) {
 if (state !== 'thinking') return;
 try {
-if (blob.size < 2000) return backToListening();
+if (blob.size < 2000) return _d();
 const text = await transcribe(blob);
-if (!text) return backToListening();
-await handleCommand(text);
+if (!text) return _d();
+await _j1(text);
 } catch (err) {
 console.error(err);
 setStatus(err instanceof UserError ? err.message : (err instanceof TypeError ? 'Network Error: request blocked (CORS/URL)' : 'Error: ' + err.message));
-setTimeout(backToListening, 1500);
+setTimeout(_d, 1500);
 }
 }
 function setAdmin(on) {
 adminOn = on;
-if (!on) adminToken = '';
+if (!on) _n = '';
 document.body.classList.toggle('admin-on', on);
+if (on) { adminVoice = 'pro'; document.body.classList.add('boom'); setTimeout(() => document.body.classList.remove('boom'), 1400); }
 }
-function sayLine(t) { startSpeech(); enqueueSpeech(t); endSpeechStream(); }
-function adminIntent(t) {
+function sayLine(t) { _a1(); _w(t); _k(); }
+function _p1(t) {
 if (!/admin|एडमिन|एडमीन|अडमिन|ऐडमिन/i.test(t) || !/mode|मोड/i.test(t)) return '';
-return /\b(off|disable|deactivate|exit|close)\b|ऑफ|बंद|बन्द/i.test(t) ? 'off' : 'on';
+if (/\b(off|disable|deactivate|exit|close)\b|ऑफ|बंद|बन्द/i.test(t)) return 'off';
+return /awake|awaken|wake|activate|अवेक|एक्टिवेट|जाग/i.test(t) ? 'on' : '';
 }
-async function checkPassword(text) {
+async function _k1(text) {
 const r = await fetch(PROXY_URL + "/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pass: text }) });
 const d = await r.json().catch(() => ({}));
-if (d.token) { adminStep = 0; adminToken = d.token; setAdmin(true); return sayLine('[excited] Admin mode activated. All systems at full power.'); }
+if (d.token) { adminStep = 0; _n = d.token; setAdmin(true); return sayLine('[excited] Admin mode activated. All systems at full power.'); }
 if (++adminTries >= 3) { adminStep = 0; return sayLine('[serious] Too many wrong attempts. Admin mode cancelled.'); }
 sayLine('[serious] Wrong password. Please try again.');
 }
-async function handleCommand(text) {
-if (adminStep === 1) return checkPassword(text);
-const it = adminIntent(text);
-if (it === 'off') { setAdmin(false); adminStep = 0; return sayLine('[calm] Admin mode off.'); }
-if (it === 'on') {
-if (adminOn) return sayLine('[calm] Admin mode is already active.');
-adminStep = 1; adminTries = 0;
-return sayLine('[serious] Admin mode requested. Please say the password.');
+async function _j1(text) {
+if (adminStep === 1 && Date.now() - adminAt > 60000) adminStep = 0;
+if (adminStep === 1) {
+if (/cancel|never ?mind|रद्द|छोड़ो/i.test(text)) { adminStep = 0; return sayLine('[calm] Okay, cancelled.'); }
+return _k1(text);
+}
+const it = _p1(text);
+if (it === 'on' && !adminOn) { adminStep = 1; adminTries = 0; adminAt = Date.now(); return sayLine('[serious] Admin mode requested. Please say the password.'); }
+if (adminOn) {
+if (it === 'off') { setAdmin(false); return sayLine('[calm] Admin mode off.'); }
+if (/voice|वॉइस|वॉयस|आवाज/i.test(text)) {
+const pro = /professional|प्रोफेशनल|प्रोफ़ेशनल/i.test(text), nor = /normal|नॉर्मल/i.test(text);
+if (pro || nor) { adminVoice = pro ? 'pro' : 'normal'; return sayLine(pro ? '[calm] Professional voice enabled.' : '[cheerful] Back to my normal voice!'); }
+}
 }
 return streamReply(text);
 }
+
 async function transcribe(blob) {
 const ext = (blob.type || '').includes('mp4') ? 'm4a' : 'webm';
 const fd = new FormData();
@@ -257,20 +278,18 @@ if (data.error) throw new UserError("Server Error: " + String((data.error && dat
 return (data.text || '').trim();
 }
 async function streamReply(userPrompt) {
-voxaBrainMemory.push({ role: "user", content: userPrompt });
-if (voxaBrainMemory.length > 7) voxaBrainMemory.splice(1, voxaBrainMemory.length - 7);
-const synth = window.speechSynthesis;
+_c.push({ role: "user", content: userPrompt });
+if (_c.length > 7) _c.splice(1, _c.length - 7);
 let full = '', buf = '', started = false;
 const emit = (sentence) => {
-if (!synth) return;
-if (!started) { started = true; startSpeech(); }
-enqueueSpeech(sentence);
+if (!started) { started = true; _a1(); }
+_w(sentence);
 };
 try {
 const res = await fetch(PROXY_URL + "/chat", {
 method: "POST",
 headers: { "Content-Type": "application/json" },
-body: JSON.stringify({ messages: voxaBrainMemory, stream: true, admin: adminToken }), signal: AbortSignal.timeout(25000)
+body: JSON.stringify({ messages: _c, stream: true, admin: _n }), signal: AbortSignal.timeout(25000)
 });
 if (!res.ok || !res.body) {
 const t = await res.text().catch(() => '');
@@ -304,74 +323,63 @@ while ((m = buf.match(/^([\s\S]*?[.!?।])\s+/))) { emit(m[1]); buf = buf.slice(
 }
 if (buf.trim()) emit(buf);
 if (!full.trim()) throw new UserError('Brain Error: empty (' + (fin || 'no finish') + (sawR ? ', thinking only' : '') + ', ' + raw.length + 'B)');
-voxaBrainMemory.push({ role: "assistant", content: full });
-if (started) endSpeechStream(); else backToListening();
+_c.push({ role: "assistant", content: full });
+if (started) _k(); else _d();
 } catch (e) {
 if (started) {
-if (full.trim()) voxaBrainMemory.push({ role: "assistant", content: full });
-endSpeechStream();
+if (full.trim()) _c.push({ role: "assistant", content: full });
+_k();
 return;
 }
-voxaBrainMemory.pop();
+_c.pop();
 throw e;
 }
 }
-function cleanForSpeech(t) {
+function _g1(t) {
 return String(t).replace(/\[[^\]]*\]/g, ' ').replace(/[*_#`~|]/g, ' ').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
 }
-let speech = null, playChain = Promise.resolve();
-function startSpeech() {
+let speech = null, _y = Promise.resolve();
+function _a1() {
 const synth = window.speechSynthesis;
 try { if (synth && (synth.speaking || synth.pending)) synth.cancel(); } catch (e) {}
-playChain = Promise.resolve();
+_y = Promise.resolve();
 speech = { pending: 0, streamEnded: false, done: false, chars: 0, watchdog: null, started: false, src: null, emo: 'cheerful', first: false, rest: '', restEmo: '' };
 }
-function markStarted(sp) {
+function _n1(sp) {
 if (sp.started || sp.done) return;
 sp.started = true;
-if (speech === sp) { state = 'speaking'; setThinking(false); setStatus('Voxa Speaking...' + (sp.note ? ' ⚠ ' + sp.note : '')); }
+if (speech === sp) { state = 'speaking'; setThinking(false); setStatus('Voxa Speaking...'); }
 }
-function armWatchdog(sp) {
+function _o1(sp) {
 clearTimeout(sp.watchdog);
-sp.watchdog = setTimeout(() => finishSpeech(sp), 15000 + sp.chars * 200);
+sp.watchdog = setTimeout(() => _x(sp), 15000 + sp.chars * 200);
 }
-function finishSpeech(sp) {
+function _x(sp) {
 if (!sp || sp.done) return;
 sp.done = true;
 clearTimeout(sp.watchdog);
 try { if (sp.src) sp.src.stop(); } catch (e) {}
 try { window.speechSynthesis.cancel(); } catch (e) {}
-setTimeout(backToListening, 350);
+setTimeout(_d, sp.err ? 3500 : 350);
 }
-function checkSpeechDone(sp) { if (sp.streamEnded && sp.pending <= 0) finishSpeech(sp); }
-function flushRest(sp) {
+function _s(sp) { if (sp.streamEnded && sp.pending <= 0) _x(sp); }
+function _h1(sp) {
 if (!sp.rest) return;
-queueSpeech(sp, sp.rest, sp.restEmo || sp.emo);
+_z(sp, sp.rest, sp.restEmo || sp.emo);
 sp.rest = ''; sp.restEmo = '';
 }
-function endSpeechStream() {
+function _k() {
 if (!speech) return;
-flushRest(speech);
+_h1(speech);
 speech.streamEnded = true;
-checkSpeechDone(speech);
+_s(speech);
 }
-function speakPart(sp, p, cb) {
-const synth = window.speechSynthesis;
-p = p.replace(/<[^>]*>/g, ' ').trim();
-if (!synth || !p) return cb();
-const u = new SpeechSynthesisUtterance(p);
-if (/[\u0900-\u097F]/.test(p)) u.lang = 'hi-IN';
-u.pitch = VOICE_PITCH; u.rate = VOICE_RATE;
-u.onstart = () => markStarted(sp);
-u.onend = u.onerror = () => cb();
-try { synth.speak(u); } catch (err) { cb(); }
-}
-async function fetchAudio(text, emo) {
-const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 9000);
+async function _q1(text, emo) {
+const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 22000);
 try {
-const r = await fetch(PROXY_URL + "/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, emo, admin: adminToken }), signal: ctl.signal });
+const r = await fetch(PROXY_URL + "/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, emo, admin: _n, voice: adminVoice }), signal: ctl.signal });
 if (!r.ok) throw new Error((await r.text()).slice(0, 90));
-const buf = await audioCtx.decodeAudioData(await r.arrayBuffer());
+const buf = await _a.decodeAudioData(await r.arrayBuffer());
 const d = buf.getChannelData(0);
 let pk = 0;
 for (let i = 0; i < d.length; i += 10) pk = Math.max(pk, Math.abs(d[i]));
@@ -379,53 +387,48 @@ if (pk < 0.004) throw new Error('silent audio');
 return buf;
 } finally { clearTimeout(t); }
 }
-async function playBuffer(sp, buf) {
-if (audioCtx.state !== 'running') await ensureRunning();
-if (audioCtx.state !== 'running') throw new Error('audio locked');
+async function _r1(sp, buf) {
+if (_a.state !== 'running') await _h();
+if (_a.state !== 'running') throw new Error('audio locked');
 return new Promise(res => {
-const src = audioCtx.createBufferSource();
-const g = audioCtx.createGain();
+const src = _a.createBufferSource();
+const g = _a.createGain();
 g.gain.value = adminOn ? 1.6 : 1;
-src.buffer = buf; src.connect(g); g.connect(audioCtx.destination); src.onended = res;
-sp.src = src; src.start(); markStarted(sp);
+src.buffer = buf; src.connect(g); g.connect(_a.destination); src.onended = res;
+sp.src = src; src.start(); _n1(sp);
 setTimeout(res, buf.duration * 1000 + 2000);
 });
 }
-function queueSpeech(sp, p, emo) {
+function _z(sp, p, emo) {
 sp.pending++;
-const job = NEURAL_TTS ? fetchAudio(p, emo) : Promise.reject(new Error('off'));
+const job = _q1(p, emo);
 job.catch(() => {});
-playChain = playChain.then(async () => {
+_y = _y.then(async () => {
 if (sp.done) return;
-try { await playBuffer(sp, await job); }
-catch (e) {
-console.warn('Neural voice failed, using phone voice:', e.message);
-sp.note = String(e.message).slice(0, 80);
-if (sp.started) setStatus('Voxa Speaking... ⚠ ' + sp.note);
-if (!sp.done) await Promise.race([new Promise(r => speakPart(sp, p, r)), new Promise(r => setTimeout(r, 6000 + p.length * 150))]);
+try { await _r1(sp, await job); }
+catch (e) { sp.err = 1; setStatus('⚠ ' + String(e.message).slice(0, 80)); }
+}).finally(() => { sp.pending--; _s(sp); });
 }
-}).finally(() => { sp.pending--; checkSpeechDone(sp); });
-}
-function enqueueSpeech(text) {
+function _w(text) {
 const sp = speech;
 if (!sp || sp.done) return;
 const em = text.match(/^\s*\[([^\]]{2,20})\]/);
 if (em) sp.emo = em[1].toLowerCase().trim();
-const clean = cleanForSpeech(text);
+const clean = _g1(text);
 if (!clean) return;
 (clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(p => /[\p{L}\p{N}]/u.test(p)).forEach(p => {
 sp.chars += p.length;
 if (sp.first && /[\u0900-\u097F]/.test(p)) { sp.rest = (sp.rest ? sp.rest + ' ' : '') + p; sp.restEmo = sp.restEmo || sp.emo; }
-else { flushRest(sp); sp.first = true; queueSpeech(sp, p, sp.emo); }
+else { _h1(sp); sp.first = true; _z(sp, p, sp.emo); }
 });
-armWatchdog(sp);
+_o1(sp);
 }
 let main360Rot = 0, rot1 = 0, rot2 = 0, basePulse = 0;
 let currentSpeed = 0.6, currentScale = 1.0, currentGlow = 25, coreGlowScale = 1.0;
 const lerp = (a, b, t) => (1 - t) * a + t * b;
 function render() {
 const thinking = state === 'thinking';
-const vv = state === 'speaking' ? 1.6 : voiceVolume;
+const vv = state === 'speaking' ? 1.6 : _m;
 let targetSpeed = 0.6, targetScale = 1.0, targetGlow = 25, targetCore = 1.0;
 if (thinking) { targetSpeed = 1.8; targetGlow = 45; targetCore = 1.15; }
 else if (vv > 0) {
@@ -453,7 +456,7 @@ glow.style.boxShadow = `0 0 ${currentGlow * (adminOn ? 1.6 : 1)}px rgba(var(--c)
 requestAnimationFrame(render);
 }
 render();
-initAudio();
+_i1();
 </script>
 </body>
 </html>
