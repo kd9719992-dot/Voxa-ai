@@ -7,7 +7,7 @@
 <style>*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{--c:0,243,255}
 body{background:#02060d;height:100vh;width:100vw;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden;font-family:Arial,sans-serif;transition:background .8s}
-body.admin-on{--c:125,211,252;background-color:#02060d;background-image:radial-gradient(circle at 50% 45%,rgba(7,50,77,.9),#02060d 72%),linear-gradient(rgba(var(--c),.07) 1px,transparent 1px),linear-gradient(90deg,rgba(var(--c),.07) 1px,transparent 1px);background-size:100% 100%,38px 38px,38px 38px;animation:gd 6s linear infinite;box-shadow:inset 0 0 90px rgba(var(--c),.3)}
+body.admin-on{--c:125,211,252;background:radial-gradient(circle at 50% 45%,#07324d,#02060d 72%)}
 .status-text{position:absolute;bottom:18%;color:rgba(var(--c),.7);font-size:14px;letter-spacing:1px;text-transform:uppercase;text-align:center;padding:0 16px}
 .voxa-container{position:relative;width:150px;height:150px;display:flex;justify-content:center;align-items:center;will-change:transform;cursor:pointer;user-select:none;-webkit-user-select:none}
 .voxa-container.thinking{--c:168,85,247}
@@ -21,19 +21,7 @@ body.admin-on{--c:125,211,252;background-color:#02060d;background-image:radial-g
 .admin-on .voxa-container::before{inset:-26px;animation:sp 12s linear infinite}
 .admin-on .voxa-container::after{inset:-14px;border-style:dotted;animation:sp 7s linear infinite reverse}
 @keyframes sp{to{transform:rotate(360deg)}}
-@keyframes gd{to{background-position:0 0,0 38px,38px 0}}
-@keyframes sc{to{top:100%}}
-@keyframes bk{50%{opacity:.35}}
-@keyframes fl{0%{filter:brightness(3.5) saturate(2)}100%{filter:none}}
-@keyframes bm{0%{scale:.3}55%{scale:1.45}100%{scale:1}}
-body.admin-on::after{content:"";position:fixed;left:0;right:0;top:-90px;height:90px;background:linear-gradient(transparent,rgba(var(--c),.2),transparent);animation:sc 3.5s linear infinite;pointer-events:none}
-body.admin-on::before{content:"ADMIN MODE  \2022  FULL POWER";position:fixed;top:7%;left:0;right:0;text-align:center;letter-spacing:6px;font-size:12px;color:rgb(var(--c));text-shadow:0 0 12px rgb(var(--c));animation:bk 2s ease-in-out infinite}
-.admin-on .status-text{text-shadow:0 0 12px rgb(var(--c));letter-spacing:3px}
-.admin-on .sphere-boundary::before,.admin-on .sphere-boundary::after{content:"";position:absolute;border-radius:50%;border:2px solid transparent;border-top-color:rgb(var(--c));border-left-color:rgba(var(--c),.4)}
-.admin-on .sphere-boundary::before{inset:-48px;animation:sp 2.4s linear infinite}
-.admin-on .sphere-boundary::after{inset:-70px;animation:sp 4s linear infinite reverse}
-body.boom{animation:fl 1.3s}
-.boom .voxa-container{animation:bm 1.3s}</style>
+
 </head>
 <body>
 <div class="voxa-container" id="voxaOrb">
@@ -92,7 +80,7 @@ if (_f) return _f;
 _f = (async () => {
 try {
 stream = await navigator.mediaDevices.getUserMedia({
-audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true, channelCount: 1 },
 video: false
 });
 stream.getAudioTracks().forEach(t => t.addEventListener('ended', () => {
@@ -218,6 +206,7 @@ try {
 if (blob.size < 2000) return _d();
 const text = await transcribe(blob);
 if (!text) return _d();
+setStatus('Voxa Thinking... "' + text.slice(0, 50) + '"');
 await _j1(text);
 } catch (err) {
 console.error(err);
@@ -229,13 +218,13 @@ function setAdmin(on) {
 adminOn = on;
 if (!on) _n = '';
 document.body.classList.toggle('admin-on', on);
-if (on) { adminVoice = 'pro'; document.body.classList.add('boom'); setTimeout(() => document.body.classList.remove('boom'), 1400); }
+if (on) { adminVoice = 'pro'; }
 }
 function sayLine(t) { _a1(); _w(t); _k(); }
 function _p1(t) {
-if (!/admin|एडमिन|एडमीन|अडमिन|ऐडमिन/i.test(t) || !/mode|मोड/i.test(t)) return '';
+if (!/admin|[एऐअ]ड्?म[िी]न/i.test(t) || !/mode|म[ोॉ]ड/i.test(t)) return '';
 if (/\b(off|disable|deactivate|exit|close)\b|ऑफ|बंद|बन्द/i.test(t)) return 'off';
-return /awake|awaken|wake|activate|अवेक|एक्टिवेट|जाग/i.test(t) ? 'on' : '';
+return /awake|awaken|wake|activate|enable|start|\bon\b|अवे?के?न|वेक|एक्?टि?वेट|ऑन|चालू|शुरू|जाग/i.test(t) ? 'on' : '';
 }
 async function _k1(text) {
 const r = await fetch(PROXY_URL + "/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pass: text }) });
@@ -360,7 +349,7 @@ sp.done = true;
 clearTimeout(sp.watchdog);
 try { if (sp.src) sp.src.stop(); } catch (e) {}
 try { window.speechSynthesis.cancel(); } catch (e) {}
-setTimeout(_d, sp.err ? 3500 : 350);
+setTimeout(_d, sp.err ? 3500 : 600);
 }
 function _s(sp) { if (sp.streamEnded && sp.pending <= 0) _x(sp); }
 function _h1(sp) {
@@ -393,7 +382,7 @@ if (_a.state !== 'running') throw new Error('audio locked');
 return new Promise(res => {
 const src = _a.createBufferSource();
 const g = _a.createGain();
-g.gain.value = adminOn ? 1.6 : 1;
+g.gain.value = adminOn ? 1.3 : 1;
 src.buffer = buf; src.connect(g); g.connect(_a.destination); src.onended = res;
 sp.src = src; src.start(); _n1(sp);
 setTimeout(res, buf.duration * 1000 + 2000);
@@ -418,7 +407,7 @@ const clean = _g1(text);
 if (!clean) return;
 (clean.match(/[^.!?।]+[.!?।]*/g) || [clean]).map(p => p.trim()).filter(p => /[\p{L}\p{N}]/u.test(p)).forEach(p => {
 sp.chars += p.length;
-if (sp.first && /[\u0900-\u097F]/.test(p)) { sp.rest = (sp.rest ? sp.rest + ' ' : '') + p; sp.restEmo = sp.restEmo || sp.emo; }
+if (sp.first && adminOn && adminVoice === 'pro' && /[\u0900-\u097F]/.test(p)) { sp.rest = (sp.rest ? sp.rest + ' ' : '') + p; sp.restEmo = sp.restEmo || sp.emo; }
 else { _h1(sp); sp.first = true; _z(sp, p, sp.emo); }
 });
 _o1(sp);
