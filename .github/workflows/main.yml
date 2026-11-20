@@ -1,3 +1,4 @@
+
 name: Build Voxa AI APK
 
 on:
@@ -74,29 +75,38 @@ jobs:
                   applicationId 'com.voxa.ai'
                   minSdk 23
                   targetSdk 28
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 2
+                  versionName '1.1'
               }
           }
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+              <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+
+              <uses-feature
+                  android:name="android.hardware.microphone"
+                  android:required="false"/>
 
               <application
                   android:theme="@android:style/Theme.Material.Light.NoActionBar"
                   android:label="Voxa AI"
-                  android:usesCleartextTraffic="false">
+                  android:usesCleartextTraffic="false"
+                  android:hardwareAccelerated="true">
 
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
+
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
+
                   </activity>
               </application>
           </manifest>
@@ -107,60 +117,170 @@ jobs:
 
           import android.app.Activity;
           import android.os.Bundle;
+          import android.Manifest;
+          import android.content.pm.PackageManager;
+          import android.view.ActionMode;
+          import android.view.MotionEvent;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
           import android.webkit.WebChromeClient;
           import android.webkit.PermissionRequest;
           import android.webkit.WebSettings;
-          import android.Manifest;
-          import android.content.pm.PackageManager;
 
           public class MainActivity extends Activity {
-              WebView webView;
-              PermissionRequest pendingRequest;
+
+              private WebView webView;
+              private PermissionRequest pendingRequest;
+
+              private static final int MIC_PERMISSION_CODE = 101;
+
+              private static final String WEBSITE =
+                  "https://kd9719992-dot.github.io/Voxa-ai/";
 
               @Override
-              public void onCreate(Bundle savedInstanceState) {
+              protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
                   webView = new WebView(this);
+                  setContentView(webView);
+
                   WebSettings settings = webView.getSettings();
                   settings.setJavaScriptEnabled(true);
                   settings.setDomStorageEnabled(true);
                   settings.setMediaPlaybackRequiresUserGesture(false);
+                  settings.setSupportZoom(false);
+                  settings.setAllowFileAccess(false);
 
-                  webView.setWebViewClient(new WebViewClient());
+                  // Block long-press on WebView
+                  webView.setLongClickable(false);
+                  webView.setHapticFeedbackEnabled(false);
+                  webView.setOnLongClickListener(v -> true);
 
-                  webView.setWebChromeClient(new WebChromeClient() {
+                  // Block text selection menu
+                  webView.setCustomSelectionActionModeCallback(
+                      new ActionMode.Callback() {
+                          @Override
+                          public boolean onCreateActionMode(
+                              ActionMode mode, android.view.Menu menu) {
+                              return false;
+                          }
+
+                          @Override
+                          public boolean onPrepareActionMode(
+                              ActionMode mode, android.view.Menu menu) {
+                              return false;
+                          }
+
+                          @Override
+                          public boolean onActionItemClicked(
+                              ActionMode mode, android.view.MenuItem item) {
+                              return false;
+                          }
+
+                          @Override
+                          public void onDestroyActionMode(ActionMode mode) {
+                          }
+                      }
+                  );
+
+                  webView.setOnTouchListener((v, event) -> {
+                      if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                          v.cancelLongPress();
+                      }
+                      return false;
+                  });
+
+                  // Web page load and text-selection prevention
+                  webView.setWebViewClient(new WebViewClient() {
                       @Override
-                      public void onPermissionRequest(PermissionRequest request) {
-                          runOnUiThread(() -> {
-                              pendingRequest = request;
-                              if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                                  == PackageManager.PERMISSION_GRANTED) {
-                                  request.grant(request.getResources());
-                              } else {
-                                  requestPermissions(
-                                      new String[]{Manifest.permission.RECORD_AUDIO}, 101);
-                              }
-                          });
+                      public void onPageFinished(WebView view, String url) {
+                          super.onPageFinished(view, url);
+
+                          String js =
+                              "(function() {" +
+                              "if(document.getElementById('voxaNoSelectStyle')) return;" +
+                              "var s=document.createElement('style');" +
+                              "s.id='voxaNoSelectStyle';" +
+                              "s.innerHTML=" +
+                              "'*{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}' +" +
+                              "'input,textarea,[contenteditable=true],[contenteditable=true] *,'[role=textbox]'{" +
+                              "-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important;}' +" +
+                              "'body{-webkit-tap-highlight-color:transparent;}' ;" +
+                              "document.head.appendChild(s);" +
+                              "})();";
+
+                          view.evaluateJavascript(js, null);
                       }
                   });
 
-                  setContentView(webView);
-                  webView.loadUrl("https://kd9719992-dot.github.io/Voxa-ai/");
+                  // Microphone permission handling
+                  webView.setWebChromeClient(new WebChromeClient() {
+
+                      @Override
+                      public void onPermissionRequest(PermissionRequest request) {
+                          runOnUiThread(() -> handleMicPermission(request));
+                      }
+                  });
+
+                  webView.loadUrl(WEBSITE);
+              }
+
+              private void handleMicPermission(PermissionRequest request) {
+
+                  boolean audioRequested = false;
+
+                  for (String resource : request.getResources()) {
+                      if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                          audioRequested = true;
+                      }
+                  }
+
+                  if (!audioRequested) {
+                      request.deny();
+                      return;
+                  }
+
+                  if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                          == PackageManager.PERMISSION_GRANTED) {
+
+                      request.grant(new String[]{
+                          PermissionRequest.RESOURCE_AUDIO_CAPTURE
+                      });
+
+                  } else {
+                      pendingRequest = request;
+
+                      requestPermissions(
+                          new String[]{Manifest.permission.RECORD_AUDIO},
+                          MIC_PERMISSION_CODE
+                      );
+                  }
               }
 
               @Override
-              public void onRequestPermissionsResult(int requestCode,
-                  String[] permissions, int[] results) {
-                  super.onRequestPermissionsResult(requestCode, permissions, results);
-                  if (requestCode == 101 && pendingRequest != null) {
-                      if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-                          pendingRequest.grant(pendingRequest.getResources());
+              public void onRequestPermissionsResult(
+                  int requestCode,
+                  String[] permissions,
+                  int[] grantResults) {
+
+                  super.onRequestPermissionsResult(
+                      requestCode, permissions, grantResults);
+
+                  if (requestCode == MIC_PERMISSION_CODE
+                          && pendingRequest != null) {
+
+                      if (grantResults.length > 0
+                              && grantResults[0]
+                              == PackageManager.PERMISSION_GRANTED) {
+
+                          pendingRequest.grant(new String[]{
+                              PermissionRequest.RESOURCE_AUDIO_CAPTURE
+                          });
+
                       } else {
                           pendingRequest.deny();
                       }
+
                       pendingRequest = null;
                   }
               }
@@ -173,6 +293,15 @@ jobs:
                       super.onBackPressed();
                   }
               }
+
+              @Override
+              protected void onDestroy() {
+                  if (webView != null) {
+                      webView.stopLoading();
+                      webView.destroy();
+                  }
+                  super.onDestroy();
+              }
           }
           EOF
 
@@ -184,4 +313,3 @@ jobs:
         with:
           name: Voxa-AI-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          
